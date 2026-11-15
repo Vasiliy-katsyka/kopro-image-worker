@@ -9,8 +9,11 @@ COMFY = "http://127.0.0.1:8188"
 OUT_DIR = "/comfyui/output"
 SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
 
+# Keep all ~17 GB of weights resident on the 24 GB GPU: dynamic VRAM re-staged them every job (~2.5 s/step).
+# Override from the RunPod template with env COMFY_ARGS if needed.
+EXTRA = os.environ.get("COMFY_ARGS", "--disable-dynamic-vram --gpu-only").split()
 proc = subprocess.Popen([sys.executable, "/comfyui/main.py", "--listen", "127.0.0.1", "--port", "8188",
-                         "--disable-auto-launch", "--dont-print-server"], cwd="/comfyui")
+                         "--disable-auto-launch", "--dont-print-server", *EXTRA], cwd="/comfyui")
 for _ in range(600):
     try:
         if requests.get(f"{COMFY}/system_stats", timeout=2).ok:
