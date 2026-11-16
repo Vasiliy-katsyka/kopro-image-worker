@@ -57,7 +57,7 @@ def workflow(prompt, w, h, frames, seed, ref=None):
         "sg2": {"class_type": "ManualSigmas", "inputs": {"sigmas": "0.85, 0.7250, 0.4219, 0.0"}},
         "s2": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["n2", 0], "guider": ["g2", 0], "sampler": ["ks2", 0], "sigmas": ["sg2", 0], "latent_image": ["av2", 0]}},
         "sep2": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["s2", 0]}},
-        "dec": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["sep2", 0], "vae": ["ck", 2], "tile_size": 768, "overlap": 64, "temporal_size": 4096, "temporal_overlap": 4}},
+        "dec": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["sep2", 0], "vae": ["ck", 2], "tile_size": 512, "overlap": 64, "temporal_size": 64, "temporal_overlap": 8}},  # chunked: decoding a 10 s clip at once OOMed
         "adec": {"class_type": "LTXVAudioVAEDecode", "inputs": {"samples": ["sep2", 1], "audio_vae": ["avae", 0]}},
         "vid": {"class_type": "CreateVideo", "inputs": {"images": ["dec", 0], "audio": ["adec", 0], "fps": float(FPS)}},
         "save": {"class_type": "SaveVideo", "inputs": {"video": ["vid", 0], "filename_prefix": "kopro", "format": "mp4", "format.codec": "h264",
@@ -82,8 +82,17 @@ def run(wf):
     pid = r.json()["prompt_id"]
     while True:
         if proc.poll() is not None:
-            raise RuntimeError("ComfyUI crashed")
-        hist = requests.get(f"{COMFY}/history/{pid}", timeout=10).json().get(pid)
+            # ComfyUI is gone (usually OOM): leave so RunPod starts a fresh worker instead of failing every later job
+            print("ComfyUI died, exiting worker", flush=True)
+            os._exit(1)
+        try:
+            hist = requests.get(f"{COMFY}/history/{pid}", timeout=10).json().get(pid)
+        except requests.ConnectionError:
+            time.sleep(2)
+            if proc.poll() is not None:
+                print("ComfyUI died, exiting worker", flush=True)
+                os._exit(1)
+            continue
         if hist:
             st = hist.get("status", {})
             if st.get("status_str") == "error":
