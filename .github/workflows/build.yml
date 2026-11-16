@@ -3,12 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       tag: { description: "image tag", required: true, default: "2.1" }
+      worker: { description: "image (Qwen-Image, root dir) or video (LTX-2.3, video/ dir)", required: true, default: "image" }
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions: { contents: read, packages: write }
     steps:
-      - name: Free disk + move Docker to /mnt (image is ~25 GB)
+      - name: Free disk + move Docker to /mnt (images are 25-50 GB)
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost /opt/microsoft /usr/local/julia* /opt/az /usr/local/share/powershell
           sudo systemctl stop docker
@@ -21,7 +22,9 @@ jobs:
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Build and push
         run: |
-          IMG=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kopro-image:${{ inputs.tag }}
-          docker build -t $IMG .
+          if [ "${{ inputs.worker }}" = "video" ]; then NAME=kopro-video; CTX=video; else NAME=kopro-image; CTX=.; fi
+          IMG=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$NAME:${{ inputs.tag }}
+          docker build -t $IMG $CTX
+          docker builder prune -af >/dev/null; df -h / /mnt
           docker push $IMG
           df -h / /mnt
